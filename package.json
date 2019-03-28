@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "jsHarmony Testing Tools",
   "main": "index.js",
-  "scripts": {
-    "test": "mocha --reporter spec"
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/apHarmony/jsharmony-test"
