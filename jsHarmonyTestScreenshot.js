@@ -20,24 +20,18 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   this.basepath = this.jsh.Config.appbasepath;
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
-  this.run_all = (run_all !== false);
+  this.run_all = (run_all !== false); // todo this is to specify if only test files from this project needs to be run
   this.data_folder = 'data';
   this.test_folder = 'test';
   this.default_test_config_path = path.join(this.test_folder, 'screenshot');
   this.default_test_data_config_path = path.join(this.basepath, this.data_folder, this.default_test_config_path);
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
-  
   this.screenshots_master_dir = path.join(this.default_test_data_config_path, 'master');
   this.screenshots_comparison_dir = path.join(this.default_test_data_config_path, 'comparison');
   this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
+  this.initDirectories();
   
   this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
-  this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check ????
+  this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check why do we need this at all ? can it be in one specific dir?
   this.result_file = path.join(this.default_test_data_config_path, 'screenshots.result.html');
   
   this.settings = {
@@ -78,36 +72,6 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   };
 }
 
-// puppeteer.launch({ ignoreHTTPSErrors: true, ignoreDefaultArgs: [ '--hide-scrollbars' ] /*, headless: false*/ })
-//   .then(function(browser){
-//   HelperFS.funcRecursive(_this.tutfolder,function(filepath, relativepath, file_cb){
-//     //For each File
-//     fs.readFile(filepath, 'utf8', function(err, txt){
-//       if(err) return file_cb(err);
-//
-//       var screenshots = [];
-//
-//       ejs.render(txt, {
-//         req: null,
-//         getScreenshot: function(url, desc, params){ screenshots.push( { url: url, desc: desc, params: params } ); },
-//         instance: '',
-//         _: _
-//       });
-//
-//       async.eachLimit(screenshots, 1, function(screenshot, screenshot_cb){
-//         _this.generateScreenshot(browser, screenshot.url, screenshot.desc, screenshot.params, screenshot_cb);
-//       }, function(err){
-//         if(err){ jsh.Log.error(err); }
-//         return file_cb();
-//       });
-//     });
-//   },undefined,undefined,function(){
-//     browser.close();
-//     return callback();
-//   });
-// }).catch(function(err){ jsh.Log.error(err); });
-
-
 jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 
 //Generate the "master" set of screenshots, in the "test_data_path/master" folder
@@ -116,11 +80,7 @@ jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 //Delete the contents of the test_data_path/master folder, if it exists.  Do not delete the folder itself.
 //Create the test_data_path/master folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
-  
-  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path, 'master'));
-  
   await this.readGlobalConfig();
-  
   await this.getBrowser();
   let tests = await this.loadTests();
   if (this.browser) {
@@ -134,7 +94,6 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 //Create the test_data_path/comparison folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
   await this.readGlobalConfig();
-  
   await this.getBrowser();
   let tests = await this.loadTests();
   if (this.browser) {
@@ -516,6 +475,15 @@ jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, c
       }
     );
   })
+}
+
+this.prototype.initDirectories = function () {
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir);
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
 }
 
 //Generate the "test_data_path/screenshot.result.html" report
