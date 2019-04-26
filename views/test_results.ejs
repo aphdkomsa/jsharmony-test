@@ -1,0 +1,24 @@
+<style>
+  .comp{
+    width: 80%;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .comp img{
+
+  }
+</style>
+<% for(var k in failImages){ %>
+  <div class="comp">
+    <h2>Screenshot name: <%= failImages[k].name; %></h2>
+    <img src="<%=screenshots_source_dir%>/<%=failImages[k].name; %>"><br>
+    <b>Reason of fail: <span style="color: red;"><%= failImages[k].reason; %></span> </b>
+    <% if (failImages[k].reason != 'New image was not generated'){ %>
+      <h3>Regenerated image:</h3>
+      <img src="<%=screenshots_generated_dir%>/<%=failImages[k].name; %>">
+      <h3>Differences:</h3>
+      <img src="<%=screenshots_diff_dir%>/<%=failImages[k].name; %>">
+    <% } %>
+    <hr>
+  </div>
+<% } %>

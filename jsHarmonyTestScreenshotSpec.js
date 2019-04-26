@@ -3,7 +3,7 @@ var _ = require('lodash');
 //  Parameters:
 //    _test: The parent jsHarmonyTestScreenshot object
 function jsHarmonyTestScreenshotSpec(_test,_id){
-  this.test = _test;   //The parent jsHarmonyTestScreenshot object todo ????
+  this.test = _test;   //The parent jsHarmonyTestScreenshot object
   this.id = _id;       //Computed field, should be set by parent
   this.url = ""; //Relative or absolute URL, including querystring
   this.batch = '';

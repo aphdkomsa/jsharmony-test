@@ -2,12 +2,13 @@ var jsHarmonyTest = require("./jsHarmonyTest.js");
 var jsHarmonyTestSpec = require("./jsHarmonyTestScreenshotSpec.js");
 var _ = require('lodash');
 var puppeteer = require('puppeteer');
-// var ejs = require('ejs');
+var ejs = require('ejs');
 var fs = require('fs');
 var path = require('path');
 var async = require('async');
 var HelperFS = require('/Users/dzmitrykomsa/projects/clone-jsharmony/HelperFS.js');
-var imagick = require('gm').subClass({imageMagick: true});
+var gm = require('gm');
+var imageMagic = gm.subClass({imageMagick: true});
 
 //  Parameters:
 //    jsh: The jsHarmony Server object
@@ -20,14 +21,25 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
   this.run_all = (run_all !== false);
-  this.default_test_config_path = 'test/screenshot';
-  this.default_test_data_config_path = 'data/' + this.default_test_config_path;
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,'data'));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,'data/test',));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path));
+  this.data_folder = 'data';
+  this.test_folder = 'test';
+  this.default_test_config_path = path.join(this.test_folder, 'screenshot');
+  this.default_test_data_config_path = path.join(this.basepath, this.data_folder, this.default_test_config_path);
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
+  
+  this.screenshots_master_dir = path.join(this.default_test_data_config_path, 'master');
+  this.screenshots_comparison_dir = path.join(this.default_test_data_config_path, 'comparison');
+  this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir);
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
   
   this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
-  this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);
+  this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check ????
+  this.result_file = path.join(this.default_test_data_config_path, 'screenshots.result.html');
+  
   this.settings = {
     server: undefined,
     cookies: {},
@@ -112,7 +124,7 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
   await this.getBrowser();
   let tests = await this.loadTests();
   if (this.browser) {
-      return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'),cb);
+    return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'), cb);
   }
 }
 
@@ -123,12 +135,10 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
   await this.readGlobalConfig();
   
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path, 'comparison'));
-  
   await this.getBrowser();
   let tests = await this.loadTests();
   if (this.browser) {
-    return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'comparison'),cb);
+    return await this.generateScreenshots(tests, this.screenshots_comparison_dir, cb);
   }
 }
 
@@ -159,7 +169,47 @@ jsHarmonyTestScreenshot.prototype.getBrowser = async function () {
 //Delete the "test_data_path/diff" folder, if it exists before running.  Do not delete the folder itself.
 //Delete the "test_data_path/screenshot.result.html" file, if it exists before running
 jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
-  return cb();
+  
+  let files = fs.readdirSync(this.screenshots_master_dir);
+  console.log('# of existing images to test ' + files.length);
+  console.log('# of generated images to test ' + fs.readdirSync(this.screenshots_comparison_dir).length);
+  let failImages = [];
+  let _this = this;
+  async.eachLimit(files, 2,
+    function (imageName, each_cb) {
+      if (!fs.existsSync(path.join(_this.screenshots_comparison_dir, imageName))) {
+        failImages[imageName] = {name: imageName, reason: 'New image was not generated'};
+        return each_cb();
+      } else {
+        return _this.compareImages(imageName, 0)
+          .then(function (isEqual) {
+            if (!isEqual) {
+              failImages[imageName] = {name: imageName, reason: 'Images are not the same.'};
+              return _this.compareImages(imageName, {file: path.join(_this.screenshots_diff_dir, imageName)})
+                .then(
+                  function () {
+                    return each_cb();
+                  });
+            } else {
+              return each_cb();
+            }
+          })
+          .catch(function (e) {
+            failImages[imageName] = {name: imageName, reason: 'Comparison Error: ' + e.toString()};
+          });
+      }
+    }
+    , function (err) {
+      if (err) _this.jsh.Log.error(err);
+      console.log('# fail: ' + _.keys(failImages).length);
+      _this.generateReport(failImages).then(function (html) {
+        fs.writeFile(_this.result_file, html, function (err) {
+          if (err) _this.jsh.Log.error(err);
+          console.log("Report successfully Written to File.");
+          return cb.send('_run-comparison ' + '# fail: ' + _.keys(failImages).length);
+        });
+      });
+    });
 }
 
 //Read the test_config_path folder, and parse the tests
@@ -215,15 +265,13 @@ jsHarmonyTestScreenshot.prototype.loadTests = async function (cb) {
   
   
   await Object.values(tests).forEach(function (value) {
-  f_t = _.concat(f_t,value);
+    f_t = _.concat(f_t, value);
   });
   // cb(); // todo ????
   return f_t;
 }
 
 jsHarmonyTestScreenshot.prototype.getTestsGroupName = function (module, file_name) {
-  
-  
   if (file_name === '_config.json') {
     return null;
   }
@@ -248,27 +296,26 @@ jsHarmonyTestScreenshot.prototype.parseTest = function (fpath, cb) {
 //The fpath should be the same as the SCREENSHOT_NAME
 jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, fpath, cb) {
   let _this = this;
-  return async.eachLimit(tests, 4, function (screenshot_spec, screenshot_cb) {
-        _this.generateScreenshot(_this.browser, screenshot_spec, fpath,screenshot_cb);
-    },cb);
+  return async.eachLimit(tests, 4,
+    function (screenshot_spec, screenshot_cb) {
+      return _this.generateScreenshot(_this.browser, screenshot_spec, fpath, screenshot_cb)
+    },
+    function (err) {
+      if (err) _this.jsh.Log.error(err);
+      return cb();
+    });
 }
 
 jsHarmonyTestScreenshot.prototype.generateScreenshot = async function (browser, screenshotScpec, fpath, cb) {
   
   let _this = this;
-  // console.log(_this);
-  // var fname = this.getScreenshotFilename(url, desc, params);
   let fname = screenshotScpec.generateFilename();
-  // var fpath = _this.default_test_data_config_path;
-  if(!path.isAbsolute(fpath)) fpath = path.join(_this.basepath, fpath);
+  if (!path.isAbsolute(fpath)) fpath = path.join(_this.basepath, fpath);
   fpath = path.join(fpath, fname);
-  //Do not generate screenshot if image already exists
-  // if (
   if (!screenshotScpec.browserWidth) screenshotScpec.browserWidth = screenshotScpec.x + screenshotScpec.width;
   if (!screenshotScpec.browserHeight) screenshotScpec.browserHeight = screenshotScpec.height;
   
-  
-  var getCropRectangle = function (selector) {  // todo check
+  var getCropRectangle = function (selector) {  // todo check !!!!
     document.querySelector('html').style.overflow = 'hidden';
     if (!selector) return null;
     return new Promise(function (resolve) {
@@ -359,20 +406,18 @@ jsHarmonyTestScreenshot.prototype.generateScreenshot = async function (browser, 
   });
 }
 
-jsHarmonyTestScreenshot.prototype.processScreenshot = function(fpath, params, callback){
-  var img = imagick(fpath);
-  if(params.postClip) img.crop(params.postClip.width, params.postClip.height, params.postClip.x, params.postClip.y);
-  if(params.trim) img.trim();
-  if(params.resize){
-    img.resize(params.resize.width||null, params.resize.height||null);
+jsHarmonyTestScreenshot.prototype.processScreenshot = function (fpath, params, callback) {
+  var img = imageMagic(fpath);
+  if (params.postClip) img.crop(params.postClip.width, params.postClip.height, params.postClip.x, params.postClip.y);
+  if (params.trim) img.trim();
+  if (params.resize) {
+    img.resize(params.resize.width || null, params.resize.height || null);
   }
   //Compress PNG
   img.quality(1003);
   img.setFormat('png');
   img.noProfile().write(fpath, callback);
 }
-
-
 
 
 //Generate the "diff" image for any screenshots that are not exactly equal, into the "test_data_path/diff" folder
@@ -389,15 +434,88 @@ jsHarmonyTestScreenshot.prototype.processScreenshot = function(fpath, params, ca
 //    }
 //  ]
 //Create the test_data_path/diff folder tree, if necessary
-jsHarmonyTestScreenshot.prototype.compareImages = function (path_master, path_comparison, cb) {
+jsHarmonyTestScreenshot.prototype.compareImages = function (imageName, options) {
+  return this.gmCompareImagesWrapper(
+    path.join(this.screenshots_master_dir, imageName),
+    path.join(this.screenshots_comparison_dir, imageName),
+    options);
 }
+
+jsHarmonyTestScreenshot.prototype.gmCompareImagesWrapper = function (srcpath, cmppath, options) {
+  return new Promise((resolve, reject) => {
+    //Resized version of cmppath, to be the same size as srcpath
+    let cmppath_srcsize = cmppath + '.srcsize.png';
+    //Compare function
+    let fcmp = function (_cmppath) {
+      if (!_cmppath) _cmppath = cmppath;
+      imageMagic().compare(srcpath, _cmppath, options, function (err, isEqual, equality, raw) {
+        if (err) return reject(err);
+        return resolve(isEqual);
+      });
+    };
+    //Check for differences without generating a difference image
+    if (!options.file) return fcmp();
+    else {
+      try {
+        //Get sizes of srcpath and cmppath
+        var img1 = imageMagic(srcpath);
+        var img2 = imageMagic(cmppath);
+        img1.size(function (err, size1) {
+          if (err) return reject(err);
+          img2.size(function (err, size2) {
+            if (err) return reject(err);
+            //If srcpath and cmppath are the same size, generate the difference image
+            if ((size1.width == size2.width) && (size1.height == size2.height)) return fcmp();
+            //Crop cmppath to be the same as srcpath, and save to cmppath_srcsize
+            img2.autoOrient();
+            img2.crop(size1.width, size1.height, 0, 0);
+            img2.extent(size1.width, size1.height);
+            img2.repage(0, 0, 0, 0);
+            img2.noProfile().write(cmppath_srcsize, function (err) {
+              if (err) console.log(err);
+              if (err) return reject(err);
+              img2 = imageMagic(cmppath_srcsize);
+              //Make sure that cmppath_srcsize is the same size as srcsize
+              img2.size(function (err, size2) {
+                if (err) return reject(err);
+                //Generate the difference image
+                if ((size1.width == size2.width) && (size1.height == size2.height)) return fcmp(cmppath_srcsize);
+                return reject(new Error('Sizes still not the same after resize'));
+              });
+            });
+          });
+        });
+      } catch (ex) {
+        return reject(ex);
+      }
+    }
+  })
+}
+
 
 //Generate the "test_data_path/screenshot.result.html" report
 //  Parameters:
 //    diff: Output from compareImages function
 //    cb - The callback function to be called on completion
 //Use jsh.getEJS('jsh_test_screenshot_report') to get the report source
-jsHarmonyTestScreenshot.prototype.generateReport = function (diff, cb) {
+jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, cb) {
+  console.log('generated');
+  return new Promise((resolve, reject) => {
+    ejs.renderFile(
+      path.join(__dirname, 'views/test_results.ejs'),
+      {
+        screenshots_source_dir: this.screenshots_master_dir,
+        screenshots_generated_dir: this.screenshots_comparison_dir,
+        screenshots_diff_dir: this.screenshots_diff_dir,
+        failImages: failImages,
+      },
+      {},
+      function (err, str) {
+        if (err) return reject(err);
+        return resolve(str);
+      }
+    );
+  })
 }
 
 //Generate the "test_data_path/screenshot.result.html" report
