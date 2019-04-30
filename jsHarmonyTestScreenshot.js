@@ -28,7 +28,12 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   this.screenshots_master_dir = path.join(this.default_test_data_config_path, 'master');
   this.screenshots_comparison_dir = path.join(this.default_test_data_config_path, 'comparison');
   this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
-  this.initDirectories();
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
+  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir); // todo delete
+  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
   
   this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
   this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check why do we need this at all ? can it be in one specific dir?
@@ -81,11 +86,8 @@ jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 //Create the test_data_path/master folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
   await this.readGlobalConfig();
-  await this.getBrowser();
   let tests = await this.loadTests();
-  if (this.browser) {
     return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'), cb);
-  }
 }
 
 //Generate the "comparison" set of screenshots, in the "test_data_path/comparison" folder
@@ -94,11 +96,8 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 //Create the test_data_path/comparison folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
   await this.readGlobalConfig();
-  await this.getBrowser();
   let tests = await this.loadTests();
-  if (this.browser) {
     return await this.generateScreenshots(tests, this.screenshots_comparison_dir, cb);
-  }
 }
 
 jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
@@ -132,6 +131,7 @@ jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
   let files = fs.readdirSync(this.screenshots_master_dir);
   console.log('# of existing images to test ' + files.length);
   console.log('# of generated images to test ' + fs.readdirSync(this.screenshots_comparison_dir).length);
+  // todo add if generated images > existing
   let failImages = [];
   let _this = this;
   async.eachLimit(files, 2,
@@ -210,8 +210,8 @@ jsHarmonyTestScreenshot.prototype.loadTests = async function (cb) {
   for (const t_group in _tests) {
     tests[t_group] = [];
     for (const t in _tests[t_group]) {
-      const testSpec = new jsHarmonyTestSpec(this, t_group + '_' + t);
-      testSpec.fromJSON(this, _tests[t_group][t]);
+      // const testSpec = new jsHarmonyTestSpec(this, t_group + '_' + t);
+      const testSpec = jsHarmonyTestSpec.fromJSON(this, t_group + '_' + t, _tests[t_group][t]);
       tests[t_group].push(testSpec);
     }
     tests[t_group].sort(function (a, b) {
@@ -244,8 +244,8 @@ jsHarmonyTestScreenshot.prototype.getTestsGroupName = function (module, file_nam
 //    cb - The callback function to be called on completion
 //Returns a jsHarmonyTestScreenshotSpec object
 //Use jsh.ParseJSON to convert the string to JSON   todo redundant ???
-jsHarmonyTestScreenshot.prototype.parseTest = function (fpath, cb) {
-}
+// jsHarmonyTestScreenshot.prototype.parseTest = function (fpath, cb) {
+// }
 
 //Generate screenshots of an array of tests, and save into a target folder
 //  Parameters:
@@ -254,129 +254,22 @@ jsHarmonyTestScreenshot.prototype.parseTest = function (fpath, cb) {
 //    cb: The callback function to be called on completion
 //The fpath should be the same as the SCREENSHOT_NAME
 jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, fpath, cb) {
+  await this.getBrowser();
   let _this = this;
-  return async.eachLimit(tests, 4,
+  return async.eachLimit(tests, 1,
     function (screenshot_spec, screenshot_cb) {
-      return _this.generateScreenshot(_this.browser, screenshot_spec, fpath, screenshot_cb)
+      return  screenshot_spec.generateScreenshot(_this.browser,fpath,screenshot_cb); // todo move to Spec
+      // return _this.generateScreenshot(_this.browser, screenshot_spec, fpath, screenshot_cb)
     },
     function (err) {
       if (err) _this.jsh.Log.error(err);
+      
+      // TODO close /open browser
+      // _this.browser.close();
       return cb();
     });
 }
 
-jsHarmonyTestScreenshot.prototype.generateScreenshot = async function (browser, screenshotScpec, fpath, cb) {
-  
-  let _this = this;
-  let fname = screenshotScpec.generateFilename();
-  if (!path.isAbsolute(fpath)) fpath = path.join(_this.basepath, fpath);
-  fpath = path.join(fpath, fname);
-  if (!screenshotScpec.browserWidth) screenshotScpec.browserWidth = screenshotScpec.x + screenshotScpec.width;
-  if (!screenshotScpec.browserHeight) screenshotScpec.browserHeight = screenshotScpec.height;
-  
-  var getCropRectangle = function (selector) {  // todo check !!!!
-    document.querySelector('html').style.overflow = 'hidden';
-    if (!selector) return null;
-    return new Promise(function (resolve) {
-      if (!jshInstance) return resolve();
-      var $ = jshInstance.$;
-      var jobjs = $(selector);
-      if (!jobjs.length) return resolve();
-      var startpos = null;
-      var endpos = null;
-      for (var i = 0; i < jobjs.length; i++) {
-        var jobj = $(jobjs[i]);
-        var offset = jobj.offset();
-        
-        var offStart = {left: offset.left - 1, top: offset.top - 1};
-        var offEnd = {left: offset.left + 1 + jobj.outerWidth(), top: offset.top + 1 + jobj.outerHeight()};
-        
-        if (!startpos) startpos = offStart;
-        if (offStart.left < startpos.left) startpos.left = offStart.left;
-        if (offStart.top < startpos.top) startpos.top = offStart.top;
-        
-        if (!endpos) endpos = offEnd;
-        if (offEnd.left > endpos.left) endpos.left = offEnd.left;
-        if (offEnd.top > endpos.top) endpos.top = offEnd.top;
-      }
-      return resolve({
-        x: startpos.left,
-        y: startpos.top,
-        width: endpos.left - startpos.left,
-        height: endpos.top - startpos.top
-      });
-    });
-  }
-  
-  return browser.newPage().then(function (page) {
-    var fullurl = 'http://localhost:' + _this.port + screenshotScpec.url;
-    console.log(fullurl);
-    page.setViewport({
-      width: parseInt(screenshotScpec.browserWidth),
-      height: parseInt(screenshotScpec.browserHeight)
-    }).then(function () {
-      page.goto(fullurl).then(function () {
-        page.evaluate(screenshotScpec.onload).then(function () {
-          page.evaluate(getCropRectangle, screenshotScpec.cropToSelector).then(function (cropRectangle) {
-            var takeScreenshot = function () {
-              setTimeout(function () {
-                console.log(fname);
-                var screenshotParams = {path: fpath, type: 'png'};
-                if (cropRectangle) screenshotScpec.postClip = cropRectangle;
-                if (screenshotScpec.height) {
-                  screenshotParams.clip = {
-                    x: screenshotScpec.x,
-                    y: screenshotScpec.y,
-                    width: screenshotScpec.width,
-                    height: screenshotScpec.height
-                  };
-                } else screenshotParams.fullPage = true;
-                page.screenshot(screenshotParams).then(function () {
-                  _this.processScreenshot(fpath, screenshotScpec, function (err) {
-                    if (err) _this.jsh.Log.error(err);
-                    page.close().then(function () {
-                      return cb();
-                    }).catch(function (err) {
-                      _this.jsh.Log.error(err);
-                    });
-                  });
-                }).catch(function (err) {
-                  _this.jsh.Log.error(err);
-                });
-              }, screenshotScpec.waitBeforeScreenshot);
-            }
-            if (screenshotScpec.beforeScreenshot) {
-              screenshotScpec.beforeScreenshot(this.jsh, page, takeScreenshot, cropRectangle);
-            } else takeScreenshot();
-          }).catch(function (err) {
-            _this.jsh.Log.error(err);
-          });
-        }).catch(function (err) {
-          _this.jsh.Log.error(err);
-        });
-      }).catch(function (err) {
-        _this.jsh.Log.error(err);
-      });
-    }).catch(function (err) {
-      _this.jsh.Log.error(err);
-    });
-  }).catch(function (err) {
-    _this.jsh.Log.error(err);
-  });
-}
-
-jsHarmonyTestScreenshot.prototype.processScreenshot = function (fpath, params, callback) {
-  var img = imageMagic(fpath);
-  if (params.postClip) img.crop(params.postClip.width, params.postClip.height, params.postClip.x, params.postClip.y);
-  if (params.trim) img.trim();
-  if (params.resize) {
-    img.resize(params.resize.width || null, params.resize.height || null);
-  }
-  //Compress PNG
-  img.quality(1003);
-  img.setFormat('png');
-  img.noProfile().write(fpath, callback);
-}
 
 
 //Generate the "diff" image for any screenshots that are not exactly equal, into the "test_data_path/diff" folder
@@ -477,15 +370,6 @@ jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, c
   })
 }
 
-this.prototype.initDirectories = function () {
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
-}
-
 //Generate the "test_data_path/screenshot.result.html" report
 //  Parameters:
 //    diff: Output from compareImages function
@@ -493,7 +377,7 @@ this.prototype.initDirectories = function () {
 //Use jsh.getEJS('jsh_test_screenshot_error_email') to get the email source
 //Use jsh.Config.error_email for the target email address
 //Implement a similar function to Logger.prototype.sendErrorEmail (jsHarmony)
-jsHarmonyTestScreenshot.prototype.sendErrorEmail = function (diff, cb) {
-}
+// jsHarmonyTestScreenshot.prototype.sendErrorEmail = function (diff, cb) {
+// }
 
 module.exports = exports = jsHarmonyTestScreenshot;

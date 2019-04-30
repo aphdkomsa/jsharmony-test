@@ -1,4 +1,7 @@
 var _ = require('lodash');
+var path = require('path');
+var gm = require('gm');
+var imageMagic = gm.subClass({imageMagick: true});
 
 //  Parameters:
 //    _test: The parent jsHarmonyTestScreenshot object
@@ -35,10 +38,13 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
 //    _test: The parent jsHarmonyTestScreenshot object
 //    obj: The JSON object
 //Returns a jsHarmonyTestScreenshotSpec object
-jsHarmonyTestScreenshotSpec.prototype.fromJSON = function(test, obj){
-  const conf = _.extend({},this.test.settings.base_screenshot,obj);
-  _.assign(this,conf);
-  return this;
+
+jsHarmonyTestScreenshotSpec.fromJSON = function(test, id, obj,){
+
+  let jsTS = new jsHarmonyTestScreenshotSpec(test,id); // todo
+  const conf = _.extend({},test.settings.base_screenshot,obj);
+  _.assign(jsTS,conf);
+  return jsTS;
 }
 
 jsHarmonyTestScreenshotSpec.prototype.generateFilename = function(){
@@ -58,8 +64,117 @@ jsHarmonyTestScreenshotSpec.prototype.generateFilename = function(){
 //If this.test.config.server is undefined, use the following logic to get the server path:
 //var port = jsh.Config.server.http_port;
 //if(jsh.Servers['default'] && jsh.Servers['default'].servers && jsh.Servers['default'].servers.length) port = jsh.Servers['default'].servers[0].address().port;
+jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (browser, fpath, cb) {
+  
+  let _this = this;
+  let fname = this.generateFilename();
+  if (!path.isAbsolute(fpath)) fpath = path.join(_this.basepath, fpath);
+  fpath = path.join(fpath, fname);
+  if (!this.browserWidth) this.browserWidth = this.x + this.width;
+  if (!this.browserHeight) this.browserHeight = this.height;
+  
+  var getCropRectangle = function (selector) {  // todo check !!!!
+    document.querySelector('html').style.overflow = 'hidden';
+    if (!selector) return null;
+    return new Promise(function (resolve) {
+      if (!jshInstance) return resolve();
+      var $ = jshInstance.$;
+      var jobjs = $(selector);
+      if (!jobjs.length) return resolve();
+      var startpos = null;
+      var endpos = null;
+      for (var i = 0; i < jobjs.length; i++) {
+        var jobj = $(jobjs[i]);
+        var offset = jobj.offset();
+        
+        var offStart = {left: offset.left - 1, top: offset.top - 1};
+        var offEnd = {left: offset.left + 1 + jobj.outerWidth(), top: offset.top + 1 + jobj.outerHeight()};
+        
+        if (!startpos) startpos = offStart;
+        if (offStart.left < startpos.left) startpos.left = offStart.left;
+        if (offStart.top < startpos.top) startpos.top = offStart.top;
+        
+        if (!endpos) endpos = offEnd;
+        if (offEnd.left > endpos.left) endpos.left = offEnd.left;
+        if (offEnd.top > endpos.top) endpos.top = offEnd.top;
+      }
+      return resolve({
+        x: startpos.left,
+        y: startpos.top,
+        width: endpos.left - startpos.left,
+        height: endpos.top - startpos.top
+      });
+    });
+  }
+  
+  return browser.newPage().then(function (page) {
+    var fullurl = 'http://localhost:' + _this.test.port + _this.url;
+    console.log(fullurl);
+    page.setViewport({
+      width: parseInt(_this.browserWidth),
+      height: parseInt(_this.browserHeight)
+    }).then(function () {
+      page.goto(fullurl).then(function () {
+        page.evaluate(_this.onload).then(function () {
+          page.evaluate(getCropRectangle, _this.cropToSelector).then(function (cropRectangle) {
+            var takeScreenshot = function () {
+              setTimeout(function () {
+                console.log(fname);
+                var screenshotParams = {path: fpath, type: 'png'};
+                if (cropRectangle) _this.postClip = cropRectangle;
+                if (_this.height) {
+                  screenshotParams.clip = {
+                    x: _this.x,
+                    y: _this.y,
+                    width: _this.width,
+                    height: _this.height
+                  };
+                } else screenshotParams.fullPage = true;
+                page.screenshot(screenshotParams).then(function () {
+                  _this.processScreenshot(fpath, _this, function (err) {
+                    if (err) _this.test.jsh.Log.error(err);
+                    page.close().then(function () {
+                      return cb();
+                    }).catch(function (err) {
+                      _this.test.jsh.Log.error(err);
+                    });
+                  });
+                }).catch(function (err) {
+                  _this.test.jsh.Log.error(err);
+                });
+              }, _this.waitBeforeScreenshot);
+            }
+            if (_this.beforeScreenshot) {
+              _this.beforeScreenshot(_this.test.jsh, page, takeScreenshot, cropRectangle);
+            } else takeScreenshot();
+          }).catch(function (err) {
+            _this.test.jsh.Log.error(err);
+          });
+        }).catch(function (err) {
+          _this.test.jsh.Log.error(err);
+        });
+      }).catch(function (err) {
+        _this.test.jsh.Log.error(err);
+      });
+    }).catch(function (err) {
+      _this.test.jsh.Log.error(err);
+    });
+  }).catch(function (err) {
+    _this.test.jsh.Log.error(err);
+  });
+}
 
-// jsHarmonyTestScreenshot.prototype.generateScreenshot = function(browser, fpath, cb){
-// }
+jsHarmonyTestScreenshotSpec.prototype.processScreenshot = function (fpath, params, callback) {
+  var img = imageMagic(fpath);
+  if (params.postClip) img.crop(params.postClip.width, params.postClip.height, params.postClip.x, params.postClip.y);
+  if (params.trim) img.trim();
+  if (params.resize) {
+    img.resize(params.resize.width || null, params.resize.height || null);
+  }
+  //Compress PNG
+  img.quality(1003);
+  img.setFormat('png');
+  img.noProfile().write(fpath, callback);
+}
 
 module.exports = exports = jsHarmonyTestScreenshotSpec;
