@@ -181,7 +181,7 @@ jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
 //Go through jsh.getModelDirs(), and for each folder, parse the tests in test_config_path
 //Set test.id to SCREENSHOT_NAME
 //Sort tests by test.batch, then by test.id.  Undefined batch should run last
-jsHarmonyTestScreenshot.prototype.loadTests = async function (cb) {
+jsHarmonyTestScreenshot.prototype.loadTests = async function () {
   let _tests = {};
   let tests = {};
   let f_t = [];
@@ -222,11 +222,9 @@ jsHarmonyTestScreenshot.prototype.loadTests = async function (cb) {
     });
   }
   
-  
   await Object.values(tests).forEach(function (value) {
     f_t = _.concat(f_t, value);
   });
-  // cb(); // todo ????
   return f_t;
 }
 
@@ -258,14 +256,11 @@ jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, f
   let _this = this;
   return async.eachLimit(tests, 1,
     function (screenshot_spec, screenshot_cb) {
-      return  screenshot_spec.generateScreenshot(_this.browser,fpath,screenshot_cb); // todo move to Spec
-      // return _this.generateScreenshot(_this.browser, screenshot_spec, fpath, screenshot_cb)
+      return  screenshot_spec.generateScreenshot(_this.browser,fpath,screenshot_cb);
     },
     function (err) {
       if (err) _this.jsh.Log.error(err);
-      
-      // TODO close /open browser
-      // _this.browser.close();
+      _this.browser.close();
       return cb();
     });
 }

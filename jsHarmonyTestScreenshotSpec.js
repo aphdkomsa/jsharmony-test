@@ -38,10 +38,8 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
 //    _test: The parent jsHarmonyTestScreenshot object
 //    obj: The JSON object
 //Returns a jsHarmonyTestScreenshotSpec object
-
 jsHarmonyTestScreenshotSpec.fromJSON = function(test, id, obj,){
-
-  let jsTS = new jsHarmonyTestScreenshotSpec(test,id); // todo
+  let jsTS = new jsHarmonyTestScreenshotSpec(test,id);
   const conf = _.extend({},test.settings.base_screenshot,obj);
   _.assign(jsTS,conf);
   return jsTS;
