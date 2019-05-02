@@ -20,7 +20,7 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   this.basepath = this.jsh.Config.appbasepath;
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
-  this.run_all = (run_all !== false); // todo this is to specify if only test files from this project needs to be run
+  this.run_all = (run_all !== false); // todo this is to specify if only test files from this project needs to be run or better to get specific name of the test
   this.data_folder = 'data';
   this.test_folder = 'test';
   this.default_test_config_path = path.join(this.test_folder, 'screenshot');
@@ -112,7 +112,9 @@ jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
 jsHarmonyTestScreenshot.prototype.getBrowser = async function () {
   try {
     this.browser = await puppeteer.launch(
-      {ignoreHTTPSErrors: true, ignoreDefaultArgs: ['--hide-scrollbars'] /*, headless: false*/}
+      {ignoreHTTPSErrors: true
+        // , ignoreDefaultArgs: ['--hide-scrollbars']
+        , headless: false}
     );
   } catch (e) {
     this.jsh.Log.error(e);
@@ -191,7 +193,7 @@ jsHarmonyTestScreenshot.prototype.loadTests = async function () {
     modules[i].test_dir = path.join(modules[i].path, '../', this.test_config_path);
     
     try {
-      modules[i].test_files = fs.readdirSync(modules[i].test_dir);
+      modules[i].test_files = fs.readdirSync(modules[i].test_dir); // todo recursive ??? and only *.json ?
       for (let j = 0; j < modules[i].test_files.length; j++) {
         var tests_group = this.getTestsGroupName(modules[i].module, modules[i].test_files[j]);
         if (!_.isEmpty(tests_group)) {

@@ -12,7 +12,6 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
   this.batch = '';
   this.x = 0;
   this.y = 0;
-  // this.width = _this.DEFAULT_SCREENSHOT_SIZE[0];
   this.width= 950;
   this.height = 700;
   this.browserWidth = null;
@@ -66,7 +65,7 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
   
   let _this = this;
   let fname = this.generateFilename();
-  if (!path.isAbsolute(fpath)) fpath = path.join(_this.basepath, fpath);
+  if (!path.isAbsolute(fpath)) fpath = path.join(this.basepath, fpath);
   fpath = path.join(fpath, fname);
   if (!this.browserWidth) this.browserWidth = this.x + this.width;
   if (!this.browserHeight) this.browserHeight = this.height;
@@ -104,62 +103,99 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
       });
     });
   }
-  
-  return browser.newPage().then(function (page) {
+  let cropRectangle = null;
+  try {
+    let page = await browser.newPage();
     var fullurl = 'http://localhost:' + _this.test.port + _this.url;
     console.log(fullurl);
-    page.setViewport({
-      width: parseInt(_this.browserWidth),
-      height: parseInt(_this.browserHeight)
-    }).then(function () {
-      page.goto(fullurl).then(function () {
-        page.evaluate(_this.onload).then(function () {
-          page.evaluate(getCropRectangle, _this.cropToSelector).then(function (cropRectangle) {
-            var takeScreenshot = function () {
-              setTimeout(function () {
-                console.log(fname);
-                var screenshotParams = {path: fpath, type: 'png'};
-                if (cropRectangle) _this.postClip = cropRectangle;
-                if (_this.height) {
-                  screenshotParams.clip = {
-                    x: _this.x,
-                    y: _this.y,
-                    width: _this.width,
-                    height: _this.height
-                  };
-                } else screenshotParams.fullPage = true;
-                page.screenshot(screenshotParams).then(function () {
-                  _this.processScreenshot(fpath, _this, function (err) {
-                    if (err) _this.test.jsh.Log.error(err);
-                    page.close().then(function () {
-                      return cb();
-                    }).catch(function (err) {
-                      _this.test.jsh.Log.error(err);
-                    });
-                  });
-                }).catch(function (err) {
-                  _this.test.jsh.Log.error(err);
-                });
-              }, _this.waitBeforeScreenshot);
-            }
-            if (_this.beforeScreenshot) {
-              _this.beforeScreenshot(_this.test.jsh, page, takeScreenshot, cropRectangle);
-            } else takeScreenshot();
-          }).catch(function (err) {
-            _this.test.jsh.Log.error(err);
-          });
-        }).catch(function (err) {
-          _this.test.jsh.Log.error(err);
-        });
-      }).catch(function (err) {
-        _this.test.jsh.Log.error(err);
-      });
-    }).catch(function (err) {
-      _this.test.jsh.Log.error(err);
+    await page.setViewport({
+      width: parseInt(this.browserWidth),
+      height: parseInt(this.browserHeight)
     });
-  }).catch(function (err) {
-    _this.test.jsh.Log.error(err);
-  });
+    await page.goto(fullurl);
+    if (!_.isEmpty(this.onload)){
+      eval( 'var func = ' + this.onload);
+      await page.evaluate(func);
+    }
+    if (this.cropToSelector){
+      cropRectangle = await page.evaluate(getCropRectangle, this.cropToSelector);
+    }
+    var screenshotParams = {path: fpath, type: 'png'};
+    if (cropRectangle) this.postClip = cropRectangle;
+    if (this.height) {
+      screenshotParams.clip = {
+        x: this.x,
+        y: this.y,
+        width: this.width,
+        height: this.height
+      };
+    } else screenshotParams.fullPage = true;
+    await page.screenshot(screenshotParams);
+    this.processScreenshot(fpath, _this, function (err) {
+      if (err) _this.test.jsh.Log.error(err);
+    });
+    await page.close();
+    
+  }catch (e) {
+    this.test.jsh.Log.error(e);
+  }
+  return cb();
+  
+  // return browser.newPage().then(function (page) {
+  //   var fullurl = 'http://localhost:' + _this.test.port + _this.url;
+  //   console.log(fullurl);
+  //   page.setViewport({
+  //     width: parseInt(_this.browserWidth),
+  //     height: parseInt(_this.browserHeight)
+  //   }).then(function () {
+  //     page.goto(fullurl).then(function () {
+  //       page.evaluate(_this.onload).then(function () {
+  //         page.evaluate(getCropRectangle, _this.cropToSelector).then(function (cropRectangle) {
+  //           var takeScreenshot = function () {
+  //             setTimeout(function () {
+  //               console.log(fname);
+  //               var screenshotParams = {path: fpath, type: 'png'};
+  //               if (cropRectangle) _this.postClip = cropRectangle;
+  //               if (_this.height) {
+  //                 screenshotParams.clip = {
+  //                   x: _this.x,
+  //                   y: _this.y,
+  //                   width: _this.width,
+  //                   height: _this.height
+  //                 };
+  //               } else screenshotParams.fullPage = true;
+  //               page.screenshot(screenshotParams).then(function () {
+  //                 _this.processScreenshot(fpath, _this, function (err) {
+  //                   if (err) _this.test.jsh.Log.error(err);
+  //                   page.close().then(function () {
+  //                     return cb();
+  //                   }).catch(function (err) {
+  //                     _this.test.jsh.Log.error(err);
+  //                   });
+  //                 });
+  //               }).catch(function (err) {
+  //                 _this.test.jsh.Log.error(err);
+  //               });
+  //             }, _this.waitBeforeScreenshot);
+  //           }
+  //           if (_this.beforeScreenshot) {
+  //             _this.beforeScreenshot(_this.test.jsh, page, takeScreenshot, cropRectangle);
+  //           } else takeScreenshot();
+  //         }).catch(function (err) {
+  //           _this.test.jsh.Log.error(err);
+  //         });
+  //       }).catch(function (err) {
+  //         _this.test.jsh.Log.error(err);
+  //       });
+  //     }).catch(function (err) {
+  //       _this.test.jsh.Log.error(err);
+  //     });
+  //   }).catch(function (err) {
+  //     _this.test.jsh.Log.error(err);
+  //   });
+  // }).catch(function (err) {
+  //   _this.test.jsh.Log.error(err);
+  // });
 }
 
 jsHarmonyTestScreenshotSpec.prototype.processScreenshot = function (fpath, params, callback) {
