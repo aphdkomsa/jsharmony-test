@@ -87,7 +87,7 @@ jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
   await this.readGlobalConfig();
   let tests = await this.loadTests();
-    return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'), cb);
+  return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'), cb);
 }
 
 //Generate the "comparison" set of screenshots, in the "test_data_path/comparison" folder
@@ -97,7 +97,7 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
   await this.readGlobalConfig();
   let tests = await this.loadTests();
-    return await this.generateScreenshots(tests, this.screenshots_comparison_dir, cb);
+  return await this.generateScreenshots(tests, this.screenshots_comparison_dir, cb);
 }
 
 jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
@@ -112,9 +112,11 @@ jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
 jsHarmonyTestScreenshot.prototype.getBrowser = async function () {
   try {
     this.browser = await puppeteer.launch(
-      {ignoreHTTPSErrors: true
+      {
+        ignoreHTTPSErrors: true
         // , ignoreDefaultArgs: ['--hide-scrollbars']
-        , headless: false}
+        , headless: false
+      }
     );
   } catch (e) {
     this.jsh.Log.error(e);
@@ -129,12 +131,18 @@ jsHarmonyTestScreenshot.prototype.getBrowser = async function () {
 //Delete the "test_data_path/diff" folder, if it exists before running.  Do not delete the folder itself.
 //Delete the "test_data_path/screenshot.result.html" file, if it exists before running
 jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
-  
-  let files = fs.readdirSync(this.screenshots_master_dir);
-  console.log('# of existing images to test ' + files.length);
-  console.log('# of generated images to test ' + fs.readdirSync(this.screenshots_comparison_dir).length);
-  // todo add if generated images > existing
   let failImages = [];
+  let files = fs.readdirSync(this.screenshots_master_dir);
+  let files_comp = fs.readdirSync(this.screenshots_comparison_dir);
+  console.log('# of existing images to test ' + files.length);
+  console.log('# of generated images to test ' + files_comp.length);
+  let files_not_in_master = _.difference(files_comp, files);
+  if (files_not_in_master.length) {
+    files_not_in_master.forEach(function (imageName) {
+      failImages[imageName] = {name: imageName, reason: 'Master image was not generated'};
+    })
+  }
+  console.log('# of master images NOT generated ' + files_not_in_master.length);
   let _this = this;
   async.eachLimit(files, 2,
     function (imageName, each_cb) {
@@ -258,7 +266,7 @@ jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, f
   let _this = this;
   return async.eachLimit(tests, 1,
     function (screenshot_spec, screenshot_cb) {
-      return  screenshot_spec.generateScreenshot(_this.browser,fpath,screenshot_cb);
+      return screenshot_spec.generateScreenshot(_this.browser, fpath, screenshot_cb);
     },
     function (err) {
       if (err) _this.jsh.Log.error(err);
@@ -266,7 +274,6 @@ jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, f
       return cb();
     });
 }
-
 
 
 //Generate the "diff" image for any screenshots that are not exactly equal, into the "test_data_path/diff" folder
