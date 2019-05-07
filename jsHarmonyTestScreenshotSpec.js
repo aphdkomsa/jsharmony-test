@@ -21,7 +21,7 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
   this.postClip = null; //{ x: 0, y: 0, width: xxx, height: yyy }
   this.cropToSelector = null; //".selector"
   this.onload = function(){}; //function(){ return new Promise(function(resolve){ /* FUNCTION_STRING */ }); }
-  this.beforeScreenshot = null; //function(jsh, page, cb, cropRectangle){ /* FUNCTION_STRING */ }
+  this.beforeScreenshot = null; //function(jsh, page, cb){ /* FUNCTION_STRING */ } //todo check continue
   this.waitBeforeScreenshot = 0;
   this.exclude = [
     //Rectangle: { x: ###, y: ###, width: ###, height: ### },
@@ -117,8 +117,8 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
       await page.setCookie(...this.test.settings.cookies);
     }
     if (!_.isEmpty(this.onload)){
-      eval( 'var func = ' + this.onload);
-      await page.evaluate(func);
+      eval( 'var func_onload = ' + this.onload);
+      await page.evaluate(func_onload);
     }
     if (this.cropToSelector){
       cropRectangle = await page.evaluate(getCropRectangle, this.cropToSelector);
@@ -135,6 +135,13 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
     } else screenshotParams.fullPage = true;
     if(this.waitBeforeScreenshot){
       await sleep(this.waitBeforeScreenshot);
+    }
+    if (!_.isEmpty(this.beforeScreenshot)){ //todo review do we need this ?  is it not the same as onload , based on functions in ejs files, in spec it is to run on backend. ?
+        // beforeScreenshot:function(jsh, page, cb){
+        //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); });
+        // }
+        // eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
+        // await func_beforeScreenshot(this.test.jsh,page);
     }
     await page.screenshot(screenshotParams);
     this.processScreenshot(fpath, _this, function (err) {
