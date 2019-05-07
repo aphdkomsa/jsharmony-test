@@ -7,6 +7,7 @@ var fs = require('fs');
 var path = require('path');
 var async = require('async');
 var HelperFS = require('/Users/dzmitrykomsa/projects/clone-jsharmony/HelperFS.js');
+// var HelperFS = require('jsharmony/HelperFS'); TODO not found need import to Package ???
 var gm = require('gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
@@ -17,7 +18,7 @@ var imageMagic = gm.subClass({imageMagick: true});
 function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_all) {
   
   this.jsh = _jsh;
-  this.basepath = this.jsh.Config.appbasepath;
+  this.basepath = this.jsh.Config.appbasepath; // todo get later after init
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
   this.run_all = (run_all !== false); // todo this is to specify if only test files from this project needs to be run or better to get specific name of the test
@@ -37,7 +38,7 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_a
   
   this.settings = {
     server: undefined,
-    cookies: {},
+    cookies: [],
     base_screenshot: {
       // "url": "",  // must be provided from config file should not be included here
       // "batch": "",
@@ -175,7 +176,7 @@ jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
         fs.writeFile(_this.result_file, html, function (err) {
           if (err) _this.jsh.Log.error(err);
           console.log("Report successfully Written to File.");
-          return cb.send('_run-comparison ' + '# fail: ' + _.keys(failImages).length);
+            if(cb) return cb();
         });
       });
     });
@@ -271,7 +272,7 @@ jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, f
     function (err) {
       if (err) _this.jsh.Log.error(err);
       _this.browser.close();
-      return cb();
+      if(cb) return cb();
     });
 }
 
@@ -384,4 +385,4 @@ jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, c
 // jsHarmonyTestScreenshot.prototype.sendErrorEmail = function (diff, cb) {
 // }
 
-module.exports = exports = jsHarmonyTestScreenshot;
+exports = module.exports = jsHarmonyTestScreenshot;

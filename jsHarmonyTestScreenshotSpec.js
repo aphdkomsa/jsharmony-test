@@ -113,6 +113,9 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
       height: parseInt(this.browserHeight)
     });
     await page.goto(fullurl);
+    if (this.test.settings.cookies){
+      await page.setCookie(...this.test.settings.cookies);
+    }
     if (!_.isEmpty(this.onload)){
       eval( 'var func = ' + this.onload);
       await page.evaluate(func);
@@ -139,63 +142,7 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
   }catch (e) {
     this.test.jsh.Log.error(e);
   }
-  return cb();
-  
-  // return browser.newPage().then(function (page) {
-  //   var fullurl = 'http://localhost:' + _this.test.port + _this.url;
-  //   console.log(fullurl);
-  //   page.setViewport({
-  //     width: parseInt(_this.browserWidth),
-  //     height: parseInt(_this.browserHeight)
-  //   }).then(function () {
-  //     page.goto(fullurl).then(function () {
-  //       page.evaluate(_this.onload).then(function () {
-  //         page.evaluate(getCropRectangle, _this.cropToSelector).then(function (cropRectangle) {
-  //           var takeScreenshot = function () {
-  //             setTimeout(function () {
-  //               console.log(fname);
-  //               var screenshotParams = {path: fpath, type: 'png'};
-  //               if (cropRectangle) _this.postClip = cropRectangle;
-  //               if (_this.height) {
-  //                 screenshotParams.clip = {
-  //                   x: _this.x,
-  //                   y: _this.y,
-  //                   width: _this.width,
-  //                   height: _this.height
-  //                 };
-  //               } else screenshotParams.fullPage = true;
-  //               page.screenshot(screenshotParams).then(function () {
-  //                 _this.processScreenshot(fpath, _this, function (err) {
-  //                   if (err) _this.test.jsh.Log.error(err);
-  //                   page.close().then(function () {
-  //                     return cb();
-  //                   }).catch(function (err) {
-  //                     _this.test.jsh.Log.error(err);
-  //                   });
-  //                 });
-  //               }).catch(function (err) {
-  //                 _this.test.jsh.Log.error(err);
-  //               });
-  //             }, _this.waitBeforeScreenshot);
-  //           }
-  //           if (_this.beforeScreenshot) {
-  //             _this.beforeScreenshot(_this.test.jsh, page, takeScreenshot, cropRectangle);
-  //           } else takeScreenshot();
-  //         }).catch(function (err) {
-  //           _this.test.jsh.Log.error(err);
-  //         });
-  //       }).catch(function (err) {
-  //         _this.test.jsh.Log.error(err);
-  //       });
-  //     }).catch(function (err) {
-  //       _this.test.jsh.Log.error(err);
-  //     });
-  //   }).catch(function (err) {
-  //     _this.test.jsh.Log.error(err);
-  //   });
-  // }).catch(function (err) {
-  //   _this.test.jsh.Log.error(err);
-  // });
+    if(cb) return cb();
 }
 
 jsHarmonyTestScreenshotSpec.prototype.processScreenshot = function (fpath, params, callback) {
