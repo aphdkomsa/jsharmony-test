@@ -133,6 +133,9 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
         height: this.height
       };
     } else screenshotParams.fullPage = true;
+    if(this.waitBeforeScreenshot){
+      await sleep(this.waitBeforeScreenshot);
+    }
     await page.screenshot(screenshotParams);
     this.processScreenshot(fpath, _this, function (err) {
       if (err) _this.test.jsh.Log.error(err);
@@ -156,6 +159,10 @@ jsHarmonyTestScreenshotSpec.prototype.processScreenshot = function (fpath, param
   img.quality(1003);
   img.setFormat('png');
   img.noProfile().write(fpath, callback);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 module.exports = exports = jsHarmonyTestScreenshotSpec;
