@@ -1,6 +1,6 @@
 var _ = require('lodash');
 var path = require('path');
-var gm = require('gm');
+var gm = require('jsharmony/lib/gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
 //  Parameters:

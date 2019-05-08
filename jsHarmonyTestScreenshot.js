@@ -1,13 +1,12 @@
 var jsHarmonyTest = require("./jsHarmonyTest.js");
 var jsHarmonyTestSpec = require("./jsHarmonyTestScreenshotSpec.js");
 var _ = require('lodash');
-var puppeteer = require('puppeteer');
+var puppeteer = require('jsharmony/lib/puppeteer');
 var ejs = require('ejs');
 var fs = require('fs');
 var path = require('path');
 var async = require('async');
-var HelperFS = require('/Users/dzmitrykomsa/projects/clone-jsharmony/HelperFS.js');
-// var HelperFS = require('jsharmony/HelperFS'); TODO not found need import to Package ???
+var HelperFS = require('jsharmony/HelperFS');
 var gm = require('gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
