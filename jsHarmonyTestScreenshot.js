@@ -14,13 +14,12 @@ var imageMagic = gm.subClass({imageMagick: true});
 //    jsh: The jsHarmony Server object
 //    _test_config_path: Path to the test screenshot config folder
 //    _test_data_path:   Path to the test screenshot data folder
-function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path, run_all) {
+function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path) {
   
   this.jsh = _jsh;
   this.basepath = this.jsh.Config.appbasepath; // todo get later after init
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
-  this.run_all = (run_all !== false); // todo this is to specify if only test files from this project needs to be run or better to get specific name of the test
   this.data_folder = 'data';
   this.test_folder = 'test';
   this.default_test_config_path = path.join(this.test_folder, 'screenshot');
