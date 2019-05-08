@@ -7,7 +7,7 @@ var fs = require('fs');
 var path = require('path');
 var async = require('async');
 var HelperFS = require('jsharmony/HelperFS');
-var gm = require('gm');
+var gm = require('jsharmony/lib/gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
 //  Parameters:
