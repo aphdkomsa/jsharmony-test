@@ -29,7 +29,7 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path) {
   this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
   HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
   HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.default_test_data_config_path));
+  // HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path)); todo folders create
   this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
   this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check why do we need this at all ? can it be in one specific dir?
   this.result_file = path.join(this.default_test_data_config_path, 'screenshots.result.html');
@@ -92,11 +92,13 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 //    cb - The callback function to be called on completion
 //Create the test_data_path/comparison folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
-  HelperFS.rmdirRecursiveSync(this.screenshots_comparison_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_comparison_dir);
-  await this.readGlobalConfig();
-  let tests = await this.loadTests();
-  return await this.generateScreenshots(tests, this.screenshots_comparison_dir, cb);
+  let _this = this;
+  HelperFS.rmdirRecursiveSync(_this.screenshots_comparison_dir);
+  HelperFS.createFolderIfNotExistsSync(_this.screenshots_comparison_dir);
+  await _this.readGlobalConfig();
+  let tests = await _this.loadTests();
+  await _this.generateScreenshots(tests, _this.screenshots_comparison_dir);
+  if (cb) return cb();
 }
 
 jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
@@ -127,7 +129,9 @@ jsHarmonyTestScreenshot.prototype.getBrowser = async function () {
 //Delete the "test_data_path/comparison" folder, if it exists before running.  Do not delete the folder itself.
 //Delete the "test_data_path/diff" folder, if it exists before running.  Do not delete the folder itself.
 //Delete the "test_data_path/screenshot.result.html" file, if it exists before running
-jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
+jsHarmonyTestScreenshot.prototype.runComparison = async function (cb) {
+  let _this = this;
+  await this.generateComparison();
   HelperFS.rmdirRecursiveSync(this.screenshots_diff_dir);
   HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
   let failImages = [];
@@ -142,7 +146,6 @@ jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
     })
   }
   console.log('# of master images NOT generated ' + files_not_in_master.length);
-  let _this = this;
   async.eachLimit(files, 2,
     function (imageName, each_cb) {
       if (!fs.existsSync(path.join(_this.screenshots_comparison_dir, imageName))) {
@@ -164,19 +167,25 @@ jsHarmonyTestScreenshot.prototype.runComparison = function (cb) {
           })
           .catch(function (e) {
             failImages[imageName] = {name: imageName, reason: 'Comparison Error: ' + e.toString()};
+            return each_cb();
           });
       }
     }
     , function (err) {
       if (err) _this.jsh.Log.error(err);
       console.log('# fail: ' + _.keys(failImages).length);
-      _this.generateReport(failImages).then(function (html) {
-        fs.writeFile(_this.result_file, html, function (err) {
+      _this.generateReport(failImages)
+        .then(function (html) {
+          fs.writeFile(_this.result_file, html, function (err) {
+            if (err) _this.jsh.Log.error(err);
+            console.log("Report successfully Written to File.");
+            if (cb) return cb();
+          });
+        })
+        .catch(function (err) {
           if (err) _this.jsh.Log.error(err);
-          console.log("Report successfully Written to File.");
-            if(cb) return cb();
+          if (cb) return cb();
         });
-      });
     });
 }
 
@@ -263,15 +272,21 @@ jsHarmonyTestScreenshot.prototype.getTestsGroupName = function (module, file_nam
 jsHarmonyTestScreenshot.prototype.generateScreenshots = async function (tests, fpath, cb) {
   await this.getBrowser();
   let _this = this;
-  return async.eachLimit(tests, 1,
-    function (screenshot_spec, screenshot_cb) {
-      return screenshot_spec.generateScreenshot(_this.browser, fpath, screenshot_cb);
-    },
-    function (err) {
-      if (err) _this.jsh.Log.error(err);
-      _this.browser.close();
-      if(cb) return cb();
-    });
+  await new Promise((resolve,reject) => {
+    async.eachLimit(tests, 1,
+      async function (screenshot_spec) {
+        await screenshot_spec.generateScreenshot(_this.browser, fpath);
+      },
+      function (err) {
+        if (err) {
+          _this.jsh.Log.error(err);
+          reject(err);
+        }
+        _this.browser.close();
+        resolve();
+      });
+  });
+  if (cb) return cb();
 }
 
 
@@ -353,8 +368,7 @@ jsHarmonyTestScreenshot.prototype.gmCompareImagesWrapper = function (srcpath, cm
 //    diff: Output from compareImages function
 //    cb - The callback function to be called on completion
 //Use jsh.getEJS('jsh_test_screenshot_report') to get the report source
-jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, cb) {
-  console.log('generated');
+jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages) {
   return new Promise((resolve, reject) => {
     ejs.renderFile(
       path.join(__dirname, 'views/test_results.ejs'),
@@ -366,6 +380,7 @@ jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages, c
       },
       {},
       function (err, str) {
+        console.log('Report generated');
         if (err) return reject(err);
         return resolve(str);
       }
