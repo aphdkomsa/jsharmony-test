@@ -204,50 +204,32 @@ jsHarmonyTestScreenshot.prototype.runComparison = async function (cb) {
 //Set test.id to SCREENSHOT_NAME
 //Sort tests by test.batch, then by test.id.  Undefined batch should run last
 jsHarmonyTestScreenshot.prototype.loadTests = async function () {
-  let _tests = {};
-  let tests = {};
-  let f_t = [];
-  const modules = this.jsh.getModelDirs();
-  for (let i = 0; i < modules.length; i++) {
-    
-    modules[i].test_dir = path.join(modules[i].path, '../', this.test_config_path);
-    
-    try {
-      modules[i].test_files = fs.readdirSync(modules[i].test_dir); // todo recursive ??? and only *.json ?
-      for (let j = 0; j < modules[i].test_files.length; j++) {
-        var tests_group = this.getTestsGroupName(modules[i].module, modules[i].test_files[j]);
-        if (!_.isEmpty(tests_group)) {
-          try {
-            let file_content = fs.readFileSync(path.join(modules[i].test_dir, modules[i].test_files[j]));
-            _tests[tests_group] = JSON.parse(file_content.toString()); //  todo refactor to tests  ????
-          } catch (e) {
-            this.jsh.Log.error(e);
-          }
-        }
+  let _this = this;
+  let tests = [];
+  try {
+    let test_files = fs.readdirSync(this.test_config_path); // todo recursive ??? and only *.json ?
+    _.each(test_files,function (fname) {
+      if (fname === "_config.json") return;
+      let file_content = fs.readFileSync(path.join(_this.test_config_path, fname));
+      let test_group = _this.getTestsGroupName('',fname);
+      let file_tests = JSON.parse(file_content.toString());
+      let file_test_specs = [];
+      for (const file_test_id in file_tests) {
+        const testSpec = jsHarmonyTestSpec.fromJSON(_this, test_group + '_' + file_test_id, file_tests[file_test_id]);
+        file_test_specs.push(testSpec);
       }
-    } catch (e) {
-      modules[i].test_files = [];
-    }
-  }
-  for (const t_group in _tests) {
-    tests[t_group] = [];
-    for (const t in _tests[t_group]) {
-      // const testSpec = new jsHarmonyTestSpec(this, t_group + '_' + t);
-      const testSpec = jsHarmonyTestSpec.fromJSON(this, t_group + '_' + t, _tests[t_group][t]);
-      tests[t_group].push(testSpec);
-    }
-    tests[t_group].sort(function (a, b) {
-      if (a.batch && b.batch) return a.batch - b.batch;
-      if (!a.batch && b.batch) return 1;
-      if (a.batch && !b.batch) return -1;
-      return 0;
+      file_test_specs.sort(function (a, b) {
+        if (a.batch && b.batch) return a.batch - b.batch;
+        if (!a.batch && b.batch) return 1;
+        if (a.batch && !b.batch) return -1;
+        return 0;
+      });
+      tests = _.concat(tests, file_test_specs);
     });
+  } catch (e) {
+    _this.jsh.Log.error(e);
   }
-  
-  await Object.values(tests).forEach(function (value) {
-    f_t = _.concat(f_t, value);
-  });
-  return f_t;
+  return tests;
 }
 
 jsHarmonyTestScreenshot.prototype.getTestsGroupName = function (module, file_name) {
