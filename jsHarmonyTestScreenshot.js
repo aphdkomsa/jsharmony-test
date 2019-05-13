@@ -29,7 +29,7 @@ function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path) {
   this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
   HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
   HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
-  // HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path)); todo folders create
+  // HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path)); todo folders create !!!!!CONTINUE refactor to passed dir!!!
   this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
   this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check why do we need this at all ? can it be in one specific dir?
   this.result_file = path.join(this.default_test_data_config_path, 'screenshots.result.html');
@@ -106,7 +106,11 @@ jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
     const conf = fs.readFileSync(path.join(this.default_test_config_path, '_config.json'));
     this.settings = _.merge(this.settings, JSON.parse(conf.toString()));
   } catch (e) {
-    this.jsh.Log.error(e);
+    if (e.code === 'ENOENT'){
+      console.log("Global _config.json file not found in directory: "+this.default_test_config_path);
+    }else{
+      this.jsh.Log.error(e);
+    }
   }
 }
 
