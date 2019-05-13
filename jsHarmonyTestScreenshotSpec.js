@@ -27,8 +27,67 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
     //Rectangle: { x: ###, y: ###, width: ###, height: ### },
     //Selector: { selector: ".C_ID" }
   ];
-  
-  
+}
+
+const getSelectorRectangle = function (selector) {
+  document.querySelector('html').style.overflow = 'hidden';
+  if (!selector) return null;
+  return new Promise(function (resolve) {
+    if (!jshInstance) return resolve();
+    var $ = jshInstance.$;
+    var jobjs = $(selector);
+    if (!jobjs.length) return resolve();
+    var startpos = null;
+    var endpos = null;
+    for (var i = 0; i < jobjs.length; i++) {
+      var jobj = $(jobjs[i]);
+      var offset = jobj.offset();
+      
+      var offStart = {left: offset.left - 1, top: offset.top - 1};
+      var offEnd = {left: offset.left + 1 + jobj.outerWidth(), top: offset.top + 1 + jobj.outerHeight()};
+      
+      if (!startpos) startpos = offStart;
+      if (offStart.left < startpos.left) startpos.left = offStart.left;
+      if (offStart.top < startpos.top) startpos.top = offStart.top;
+      
+      if (!endpos) endpos = offEnd;
+      if (offEnd.left > endpos.left) endpos.left = offEnd.left;
+      if (offEnd.top > endpos.top) endpos.top = offEnd.top;
+    }
+    return resolve({
+      x: startpos.left,
+      y: startpos.top,
+      width: endpos.left - startpos.left,
+      height: endpos.top - startpos.top
+    });
+  });
+}
+
+const addElement = function (elem) {
+  document.querySelector('html').style.overflow = 'hidden';
+  if (!elem) return null;
+  if (!jshInstance) return null;
+  var $ = jshInstance.$;
+  var _elem = $(elem);
+  $('html').append(_elem);
+}
+
+const excludeElem = async function(exl,page){
+  var excludeRectangle = (exl['selector']) ? await page.evaluate(getSelectorRectangle, exl['selector']): exl;
+  let div = generateHoverDiv(excludeRectangle);
+  await page.evaluate(addElement, div);
+}
+
+const sleep = function(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const generateHoverDiv = function(dimensions){
+  let d = "<div style='background-color: black; position: absolute; width: {{width}}px; height: {{height}}px; top:{{top}}px; left: {{left}}px;'></div>";
+  return d.replace("{{width}}",dimensions.width)
+    .replace("{{height}}",dimensions.height)
+    .replace("{{top}}",dimensions.y)
+    .replace("{{left}}",dimensions.x);
 }
 
 //Parse a JSON object and return a jsHarmonyTestScreenshotSpec object
@@ -45,12 +104,12 @@ jsHarmonyTestScreenshotSpec.fromJSON = function(test, id, obj,){
 }
 
 jsHarmonyTestScreenshotSpec.prototype.generateFilename = function(){
-    //Generate file name
-    var fname = this.id;
-    if(this.width) fname += '_' + this.width;
-    if(this.height) fname += '_' + this.height;
-    fname += '.png';
-    return fname;
+  //Generate file name
+  var fname = this.id;
+  if(this.width) fname += '_' + this.width;
+  if(this.height) fname += '_' + this.height;
+  fname += '.png';
+  return fname;
 }
 
 //Generate a screenshot and save to the target file
@@ -69,39 +128,6 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
   if (!this.browserWidth) this.browserWidth = this.x + this.width;
   if (!this.browserHeight) this.browserHeight = this.height;
   
-  var getCropRectangle = function (selector) {  // todo check !!!!
-    document.querySelector('html').style.overflow = 'hidden';
-    if (!selector) return null;
-    return new Promise(function (resolve) {  // todo do we need to wait here ? continue
-      if (!jshInstance) return resolve();
-      var $ = jshInstance.$;
-      var jobjs = $(selector);
-      if (!jobjs.length) return resolve();
-      var startpos = null;
-      var endpos = null;
-      for (var i = 0; i < jobjs.length; i++) {
-        var jobj = $(jobjs[i]);
-        var offset = jobj.offset();
-        
-        var offStart = {left: offset.left - 1, top: offset.top - 1};
-        var offEnd = {left: offset.left + 1 + jobj.outerWidth(), top: offset.top + 1 + jobj.outerHeight()};
-        
-        if (!startpos) startpos = offStart;
-        if (offStart.left < startpos.left) startpos.left = offStart.left;
-        if (offStart.top < startpos.top) startpos.top = offStart.top;
-        
-        if (!endpos) endpos = offEnd;
-        if (offEnd.left > endpos.left) endpos.left = offEnd.left;
-        if (offEnd.top > endpos.top) endpos.top = offEnd.top;
-      }
-      return resolve({
-        x: startpos.left,
-        y: startpos.top,
-        width: endpos.left - startpos.left,
-        height: endpos.top - startpos.top
-      });
-    });
-  }
   let cropRectangle = null;
   try {
     let page = await browser.newPage();
@@ -120,7 +146,12 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
       await page.evaluate(func_onload);
     }
     if (this.cropToSelector){
-      cropRectangle = await page.evaluate(getCropRectangle, this.cropToSelector);
+      cropRectangle = await page.evaluate(getSelectorRectangle, this.cropToSelector);
+    }
+    if (this.exclude.length){
+      _.each(this.exclude,async function (exl) {
+        await excludeElem(exl,page);
+      })
     }
     var screenshotParams = {path: fpath, type: 'png'};
     if (cropRectangle) this.postClip = cropRectangle;
@@ -136,11 +167,11 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
       await sleep(this.waitBeforeScreenshot);
     }
     if (!_.isEmpty(this.beforeScreenshot)){ //todo review do we need this ?  is it not the same as onload , based on functions in ejs files, in spec it is to run on backend. ?
-        // beforeScreenshot:function(jsh, page, cb){
-        //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); });
-        // }
-        // eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
-        // await func_beforeScreenshot(this.test.jsh,page);
+      // beforeScreenshot:function(jsh, page, cb){
+      //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); });
+      // }
+      // eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
+      // await func_beforeScreenshot(this.test.jsh,page);
     }
     await page.screenshot(screenshotParams);
     await this.processScreenshot(fpath, _this);
@@ -168,10 +199,6 @@ jsHarmonyTestScreenshotSpec.prototype.processScreenshot = function (fpath, param
       return resolve();
     });
   });
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 module.exports = exports = jsHarmonyTestScreenshotSpec;
