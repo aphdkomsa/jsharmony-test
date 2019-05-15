@@ -118,13 +118,12 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 //  Parameters:
 //    cb - The callback function to be called on completion
 //Create the test_data_path/comparison folder tree, if necessary
-jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) { // todo check if _this nessary
-  let _this = this;
-  HelperFS.rmdirRecursiveSync(_this.screenshots_comparison_dir);
-  createFolderIfNotExistsRecursiveSync(_this.screenshots_comparison_dir);
-  await _this.readGlobalConfig();
-  let tests = await _this.loadTests();
-  await _this.generateScreenshots(tests, _this.screenshots_comparison_dir);
+jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
+  HelperFS.rmdirRecursiveSync(this.screenshots_comparison_dir);
+  createFolderIfNotExistsRecursiveSync(this.screenshots_comparison_dir);
+  await this.readGlobalConfig();
+  let tests = await this.loadTests();
+  await this.generateScreenshots(tests, this.screenshots_comparison_dir);
   if (cb) return cb();
 }
 
