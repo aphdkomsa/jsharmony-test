@@ -123,7 +123,6 @@ jsHarmonyTestScreenshotSpec.prototype.generateFilename = function(){
 jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (browser, fpath, cb) {
   let _this = this;
   let fname = this.generateFilename();
-  if (!path.isAbsolute(fpath)) fpath = path.join(this.basepath, fpath);
   fpath = path.join(fpath, fname);
   if (!this.browserWidth) this.browserWidth = this.x + this.width;
   if (!this.browserHeight) this.browserHeight = this.height;

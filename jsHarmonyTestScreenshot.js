@@ -10,6 +10,34 @@ var HelperFS = require('jsharmony/HelperFS');
 var gm = require('jsharmony/lib/gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
+// todo candidate to add to HelperFS
+
+let createFolderIfNotExistsRecursiveSync = function(targetDir, { isRelativeToScript = false } = {}){
+  const sep = path.sep;
+  const initDir = path.isAbsolute(targetDir) ? sep : '';
+  const baseDir = isRelativeToScript ? __dirname : '.';
+  
+  return targetDir.split(sep).reduce((parentDir, childDir) => {
+    const curDir = path.resolve(baseDir, parentDir, childDir);
+    try {
+      fs.mkdirSync(curDir);
+    } catch (err) {
+      if (err.code === 'EEXIST') { // curDir already exists!
+        return curDir;
+      }
+      // To avoid `EISDIR` error on Mac and `EACCES`-->`ENOENT` and `EPERM` on Windows.
+      if (err.code === 'ENOENT') { // Throw the original parentDir error on curDir `ENOENT` failure.
+        throw new Error(`EACCES: permission denied, mkdir '${parentDir}'`);
+      }
+      const caughtErr = ['EACCES', 'EPERM', 'EISDIR'].indexOf(err.code) > -1;
+      if (!caughtErr || caughtErr && curDir === path.resolve(targetDir)) {
+        throw err; // Throw if it's just the last created dir.
+      }
+    }
+    return curDir;
+  }, initDir);
+}
+
 //  Parameters:
 //    jsh: The jsHarmony Server object
 //    _test_config_path: Path to the test screenshot config folder
@@ -17,22 +45,21 @@ var imageMagic = gm.subClass({imageMagick: true});
 function jsHarmonyTestScreenshot(_jsh, _test_config_path, _test_data_path) {
   
   this.jsh = _jsh;
-  this.basepath = this.jsh.Config.appbasepath; // todo get later after init
   this.port = _jsh.Servers['default'].servers[0].address().port;
   this.browser = null;
   this.data_folder = 'data';
   this.test_folder = 'test';
+  this.master_dir = "master";
+  this.comparison_dir = "comparison";
+  this.diff_dir = "diff";
   this.default_test_config_path = path.join(this.test_folder, 'screenshot');
-  this.default_test_data_config_path = path.join(this.basepath, this.data_folder, this.default_test_config_path);
-  this.screenshots_master_dir = path.join(this.default_test_data_config_path, 'master');
-  this.screenshots_comparison_dir = path.join(this.default_test_data_config_path, 'comparison');
-  this.screenshots_diff_dir = path.join(this.default_test_data_config_path, 'diff');
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder));
-  HelperFS.createFolderIfNotExistsSync(path.join(this.basepath, this.data_folder, this.test_folder));
-  // HelperFS.createFolderIfNotExistsSync(path.join(this.basepath,this.default_test_data_config_path)); todo folders create !!!!!CONTINUE refactor to passed dir!!!
-  this.test_config_path = ((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path);
-  this.test_data_path = ((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path);  // todo to check why do we need this at all ? can it be in one specific dir?
-  this.result_file = path.join(this.default_test_data_config_path, 'screenshots.result.html');
+  this.default_test_data_config_path = path.join(this.data_folder, this.default_test_config_path);
+  this.test_config_path = path.normalize(((_.isEmpty(_test_config_path)) ? this.default_test_config_path : _test_config_path));
+  this.test_data_path = path.normalize(((_.isEmpty(_test_data_path)) ? this.default_test_data_config_path : _test_data_path));
+  this.screenshots_master_dir = path.join(this.test_data_path,this.master_dir);
+  this.screenshots_comparison_dir = path.join(this.test_data_path, this.comparison_dir);
+  this.screenshots_diff_dir = path.join(this.test_data_path, this.diff_dir);
+  this.result_file = path.join(this.test_data_path, 'screenshots.result.html');
   
   this.settings = {
     server: undefined,
@@ -81,20 +108,20 @@ jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 //Create the test_data_path/master folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
   HelperFS.rmdirRecursiveSync(this.screenshots_master_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_master_dir);
+  createFolderIfNotExistsRecursiveSync(this.screenshots_master_dir);
   await this.readGlobalConfig();
   let tests = await this.loadTests();
-  return await this.generateScreenshots(tests, path.join(this.default_test_data_config_path, 'master'), cb);
+  return await this.generateScreenshots(tests, path.join(this.test_data_path, 'master'), cb);
 }
 
 //Generate the "comparison" set of screenshots, in the "test_data_path/comparison" folder
 //  Parameters:
 //    cb - The callback function to be called on completion
 //Create the test_data_path/comparison folder tree, if necessary
-jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
+jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) { // todo check if _this nessary
   let _this = this;
   HelperFS.rmdirRecursiveSync(_this.screenshots_comparison_dir);
-  HelperFS.createFolderIfNotExistsSync(_this.screenshots_comparison_dir);
+  createFolderIfNotExistsRecursiveSync(_this.screenshots_comparison_dir);
   await _this.readGlobalConfig();
   let tests = await _this.loadTests();
   await _this.generateScreenshots(tests, _this.screenshots_comparison_dir);
@@ -103,11 +130,11 @@ jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
 
 jsHarmonyTestScreenshot.prototype.readGlobalConfig = async function () {
   try {
-    const conf = fs.readFileSync(path.join(this.default_test_config_path, '_config.json'));
+    const conf = fs.readFileSync(path.join(this.test_config_path, '_config.json'));
     this.settings = _.merge(this.settings, JSON.parse(conf.toString()));
   } catch (e) {
     if (e.code === 'ENOENT'){
-      console.log("Global _config.json file not found in directory: "+this.default_test_config_path);
+      console.log("Global _config.json file not found in directory: "+this.test_config_path);
     }else{
       this.jsh.Log.error(e);
     }
@@ -137,7 +164,7 @@ jsHarmonyTestScreenshot.prototype.runComparison = async function (cb) {
   let _this = this;
   await this.generateComparison();
   HelperFS.rmdirRecursiveSync(this.screenshots_diff_dir);
-  HelperFS.createFolderIfNotExistsSync(this.screenshots_diff_dir);
+  createFolderIfNotExistsRecursiveSync(this.screenshots_diff_dir);
   let failImages = [];
   let files = fs.readdirSync(this.screenshots_master_dir);
   let files_comp = fs.readdirSync(this.screenshots_comparison_dir);
@@ -359,9 +386,9 @@ jsHarmonyTestScreenshot.prototype.generateReport = async function (failImages) {
     ejs.renderFile(
       path.join(__dirname, 'views/test_results.ejs'),
       {
-        screenshots_source_dir: this.screenshots_master_dir,
-        screenshots_generated_dir: this.screenshots_comparison_dir,
-        screenshots_diff_dir: this.screenshots_diff_dir,
+        screenshots_source_dir: this.master_dir,
+        screenshots_generated_dir: this.comparison_dir,
+        screenshots_diff_dir: this.diff_dir,
         failImages: failImages,
       },
       {},
