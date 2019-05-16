@@ -233,9 +233,10 @@ jsHarmonyTestScreenshot.prototype.loadTests = async function () {
   let _this = this;
   let tests = [];
   try {
-    let test_files = fs.readdirSync(this.test_config_path); // todo recursive ??? and only *.json ?
+    let test_files = fs.readdirSync(this.test_config_path);
     _.each(test_files,function (fname) {
       if (fname === "_config.json") return;
+      if (fname.substring(fname.length-5) !== ".json") return;
       let file_content = fs.readFileSync(path.join(_this.test_config_path, fname));
       let test_group = _this.getTestsGroupName('',fname);
       let file_tests = JSON.parse(file_content.toString());
