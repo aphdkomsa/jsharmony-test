@@ -10,34 +10,6 @@ var HelperFS = require('jsharmony/HelperFS');
 var gm = require('jsharmony/lib/gm');
 var imageMagic = gm.subClass({imageMagick: true});
 
-// todo candidate to add to HelperFS
-
-let createFolderIfNotExistsRecursiveSync = function(targetDir, { isRelativeToScript = false } = {}){
-  const sep = path.sep;
-  const initDir = path.isAbsolute(targetDir) ? sep : '';
-  const baseDir = isRelativeToScript ? __dirname : '.';
-  
-  return targetDir.split(sep).reduce((parentDir, childDir) => {
-    const curDir = path.resolve(baseDir, parentDir, childDir);
-    try {
-      fs.mkdirSync(curDir);
-    } catch (err) {
-      if (err.code === 'EEXIST') { // curDir already exists!
-        return curDir;
-      }
-      // To avoid `EISDIR` error on Mac and `EACCES`-->`ENOENT` and `EPERM` on Windows.
-      if (err.code === 'ENOENT') { // Throw the original parentDir error on curDir `ENOENT` failure.
-        throw new Error(`EACCES: permission denied, mkdir '${parentDir}'`);
-      }
-      const caughtErr = ['EACCES', 'EPERM', 'EISDIR'].indexOf(err.code) > -1;
-      if (!caughtErr || caughtErr && curDir === path.resolve(targetDir)) {
-        throw err; // Throw if it's just the last created dir.
-      }
-    }
-    return curDir;
-  }, initDir);
-}
-
 //  Parameters:
 //    jsh: The jsHarmony Server object
 //    _test_config_path: Path to the test screenshot config folder
@@ -108,7 +80,7 @@ jsHarmonyTestScreenshot.prototype = new jsHarmonyTest();
 //Create the test_data_path/master folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
   HelperFS.rmdirRecursiveSync(this.screenshots_master_dir);
-  createFolderIfNotExistsRecursiveSync(this.screenshots_master_dir);
+  HelperFS.createFolderRecursiveSync(this.screenshots_master_dir);
   await this.readGlobalConfig();
   let tests = await this.loadTests();
   return await this.generateScreenshots(tests, path.join(this.test_data_path, 'master'), cb);
@@ -120,7 +92,7 @@ jsHarmonyTestScreenshot.prototype.generateMaster = async function (cb) {
 //Create the test_data_path/comparison folder tree, if necessary
 jsHarmonyTestScreenshot.prototype.generateComparison = async function (cb) {
   HelperFS.rmdirRecursiveSync(this.screenshots_comparison_dir);
-  createFolderIfNotExistsRecursiveSync(this.screenshots_comparison_dir);
+  HelperFS.createFolderRecursiveSync(this.screenshots_comparison_dir);
   await this.readGlobalConfig();
   let tests = await this.loadTests();
   await this.generateScreenshots(tests, this.screenshots_comparison_dir);
@@ -163,7 +135,7 @@ jsHarmonyTestScreenshot.prototype.runComparison = async function (cb) {
   let _this = this;
   await this.generateComparison();
   HelperFS.rmdirRecursiveSync(this.screenshots_diff_dir);
-  createFolderIfNotExistsRecursiveSync(this.screenshots_diff_dir);
+  HelperFS.createFolderRecursiveSync(this.screenshots_diff_dir);
   let failImages = [];
   let files = fs.readdirSync(this.screenshots_master_dir);
   let files_comp = fs.readdirSync(this.screenshots_comparison_dir);
@@ -266,15 +238,6 @@ jsHarmonyTestScreenshot.prototype.getTestsGroupName = function (module, file_nam
   let name = module + '_' + file_name;
   return name.replace(/[^0-9A-Za-z]/g, "_");
 }
-
-//Parse a string and return a jsHarmonyTestScreenshotSpec object
-//  Parameters:
-//    fpath: The full path to the config file
-//    cb - The callback function to be called on completion
-//Returns a jsHarmonyTestScreenshotSpec object
-//Use jsh.ParseJSON to convert the string to JSON   todo redundant ???
-// jsHarmonyTestScreenshot.prototype.parseTest = function (fpath, cb) {
-// }
 
 //Generate screenshots of an array of tests, and save into a target folder
 //  Parameters:
