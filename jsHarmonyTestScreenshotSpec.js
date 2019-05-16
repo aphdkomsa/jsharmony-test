@@ -21,7 +21,7 @@ function jsHarmonyTestScreenshotSpec(_test,_id){
   this.postClip = null; //{ x: 0, y: 0, width: xxx, height: yyy }
   this.cropToSelector = null; //".selector"
   this.onload = function(){}; //function(){ return new Promise(function(resolve){ /* FUNCTION_STRING */ }); }
-  this.beforeScreenshot = null; //function(jsh, page, cb){ /* FUNCTION_STRING */ } //todo check continue
+  this.beforeScreenshot = null; //function(jsh, page, cb){ /* FUNCTION_STRING */ }
   this.waitBeforeScreenshot = 0;
   this.exclude = [
     //Rectangle: { x: ###, y: ###, width: ###, height: ### },
@@ -165,12 +165,14 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
     if(this.waitBeforeScreenshot){
       await sleep(this.waitBeforeScreenshot);
     }
-    if (!_.isEmpty(this.beforeScreenshot)){ //todo review do we need this ?  is it not the same as onload , based on functions in ejs files, in spec it is to run on backend. ?
+    if (!_.isEmpty(this.beforeScreenshot)){
       // beforeScreenshot:function(jsh, page, cb){
       //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); });
       // }
-      // eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
-      // await func_beforeScreenshot(this.test.jsh,page);
+      eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
+      await new Promise((resolve) => {
+        func_beforeScreenshot(this.test.jsh,page,resolve);
+      });
     }
     await page.screenshot(screenshotParams);
     await this.processScreenshot(fpath, _this);
