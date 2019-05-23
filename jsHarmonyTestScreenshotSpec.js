@@ -177,11 +177,16 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
         // beforeScreenshot:function(jsh, page, cb){
         //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); return cb() });
         // }
-        // "beforeScreenshot": "function(jsh, page, cb){return page.click('.submit')}" todo no handler of errors in function ??? and to consider way to wait for page.click() and followed events
-        eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
-          await new Promise( (resolve) => {
-            func_beforeScreenshot(this.test.jsh,page,resolve);
-          });
+        // "beforeScreenshot": "function(jsh, page, cb){return page.click('.xsearchbutton.xsearchbuttonjsHarmonyFactory_QNSSL1');}"
+        eval( 'var func_beforeScreenshot = async ' + this.beforeScreenshot);
+        await new Promise( async (resolve) => {
+          try{
+            await func_beforeScreenshot(this.test.jsh,page,resolve);
+          }catch (e) {
+            this.test.jsh.Log.error(e);
+            resolve();
+          }
+        });
       }
     }else{
       screenshotParams.fullPage = true;
