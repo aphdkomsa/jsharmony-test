@@ -7,6 +7,7 @@ var imageMagic = gm.subClass({imageMagick: true});
 //    _test: The parent jsHarmonyTestScreenshot object
 function jsHarmonyTestScreenshotSpec(_test,_id){
   this.test = _test;   //The parent jsHarmonyTestScreenshot object
+  this.base_url = 'http://localhost:' + this.test.port;
   this.id = _id;       //Computed field, should be set by parent
   this.url = ""; //Relative or absolute URL, including querystring
   this.batch = '';
@@ -74,6 +75,10 @@ const addElement = function (elem) {
 
 const excludeElem = async function(exl,page){
   var excludeRectangle = (exl['selector']) ? await page.evaluate(getSelectorRectangle, exl['selector']): exl;
+  if(!excludeRectangle) {
+    console.log('Selector "'+exl['selector']+'" not exist on the page');
+    return;
+  }
   let div = generateHoverDiv(excludeRectangle);
   await page.evaluate(addElement, div);
 }
@@ -130,49 +135,56 @@ jsHarmonyTestScreenshotSpec.prototype.generateScreenshot = async function (brows
   let cropRectangle = null;
   try {
     let page = await browser.newPage();
-    var fullurl = 'http://localhost:' + _this.test.port + _this.url;
+    var fullurl = _this.base_url+ _this.url;
     console.log(fullurl);
     await page.setViewport({
       width: parseInt(this.browserWidth),
       height: parseInt(this.browserHeight)
     });
-    await page.goto(fullurl);
     if (this.test.settings.cookies){
+      await page.goto(_this.base_url+'/');
       await page.setCookie(...this.test.settings.cookies);
     }
-    if (!_.isEmpty(this.onload)){
-      eval( 'var func_onload = ' + this.onload);
-      await page.evaluate(func_onload);
-    }
-    if (this.cropToSelector){
-      cropRectangle = await page.evaluate(getSelectorRectangle, this.cropToSelector);
-    }
-    if (this.exclude.length){
-      _.each(this.exclude,async function (exl) {
-        await excludeElem(exl,page);
-      })
-    }
+    var resp = await page.goto(fullurl);
     var screenshotParams = {path: fpath, type: 'png'};
-    if (cropRectangle) this.postClip = cropRectangle;
-    if (this.height) {
-      screenshotParams.clip = {
-        x: this.x,
-        y: this.y,
-        width: this.width,
-        height: this.height
-      };
-    } else screenshotParams.fullPage = true;
-    if(this.waitBeforeScreenshot){
-      await sleep(this.waitBeforeScreenshot);
-    }
-    if (!_.isEmpty(this.beforeScreenshot)){
-      // beforeScreenshot:function(jsh, page, cb){
-      //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); });
-      // }
-      eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
-      await new Promise((resolve) => {
-        func_beforeScreenshot(this.test.jsh,page,resolve);
-      });
+    // console.log(resp);
+    if (resp._status <="302"){
+      if (!_.isEmpty(this.onload)){
+        eval( 'var func_onload = ' + this.onload);
+        await page.evaluate(func_onload);
+      }
+      if (this.cropToSelector){
+        cropRectangle = await page.evaluate(getSelectorRectangle, this.cropToSelector);
+      }
+      if (this.exclude.length){
+        _.each(this.exclude,async function (exl) {
+          await excludeElem(exl,page);
+        })
+      }
+      if (cropRectangle) this.postClip = cropRectangle;
+      if (this.height) {
+        screenshotParams.clip = {
+          x: this.x,
+          y: this.y,
+          width: this.width,
+          height: this.height
+        };
+      } else screenshotParams.fullPage = true;
+      if(this.waitBeforeScreenshot){
+        await sleep(this.waitBeforeScreenshot);
+      }
+      if (!_.isEmpty(this.beforeScreenshot)){
+        // beforeScreenshot:function(jsh, page, cb){
+        //     page.click('.xsearch_column').then(cb).catch(function (err) { jsh.Log.error(err); return cb() });
+        // }
+        // "beforeScreenshot": "function(jsh, page, cb){return page.click('.submit')}" todo no handler of errors in function ??? and to consider way to wait for page.click() and followed events
+        eval( 'var func_beforeScreenshot = ' + this.beforeScreenshot);
+          await new Promise( (resolve) => {
+            func_beforeScreenshot(this.test.jsh,page,resolve);
+          });
+      }
+    }else{
+      screenshotParams.fullPage = true;
     }
     await page.screenshot(screenshotParams);
     await this.processScreenshot(fpath, _this);
